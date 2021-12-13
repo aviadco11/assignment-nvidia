@@ -1,12 +1,81 @@
-# You can override the included template(s) by including variable overrides
-# SAST customization: https://docs.gitlab.com/ee/user/application_security/sast/#customizing-the-sast-settings
-# Secret Detection customization: https://docs.gitlab.com/ee/user/application_security/secret_detection/#customizing-settings
-# Dependency Scanning customization: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/#customizing-the-dependency-scanning-settings
-# Note that environment variables can be set in several places
-# See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
+image: docker:20
+
 stages:
-- test
-sast:
+  - prune
+  - build
+  - test
+  - release
+  - deploy
+  - logout
+
+variables:
+  CONTAINER_TEST_IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+  CONTAINER_RELEASE_IMAGE: $CI_REGISTRY_IMAGE:latest
+
+services:
+  - docker:20-dind
+
+before_script:
+  - echo -n $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY      
+  - docker info
+
+prune_images:
+  stage: prune
+  script:
+    - CONTAINERS=$(docker ps -a -q --filter=status=exited --filter=status=dead)
+    - docker rm -v ${CONTAINERS}
+    - docker image prune -a --force --filter "until=240h"
+
+build:
+  stage: build
+  tags:
+    - docker
+  script:
+    - echo "compile code:"
+    - python3 -m py_compile ./app/main.py
+    - echo "unit test:"
+    - python3 ./app/test/test.py Code-Linting
+    - python3 ./app/test/test.py Storage-mng  
+    - echo "build docker image"
+    - docker build --pull -t $CONTAINER_TEST_IMAGE .
+
+test1:
   stage: test
-include:
-- template: Security/SAST.gitlab-ci.yml
+  tags:
+    - docker
+  script:
+    - echo "Stress test"
+    - docker run $CONTAINER_TEST_IMAGE python3 ./app/test/test.py stress-test
+
+test2:
+  stage: test
+  tags:
+    - docker
+  script:
+    - echo "Intgeration test"
+    - docker run $CONTAINER_TEST_IMAGE python3 ./app/test/test.py metrics-test
+    
+push-image:
+  stage: release
+  tags:
+    - docker      
+  script:
+    - echo "push image to registry"
+    - docker tag $CONTAINER_TEST_IMAGE $CONTAINER_RELEASE_IMAGE
+    - docker push $CONTAINER_RELEASE_IMAGE
+  only:
+    - main
+
+deploy:
+  stage: deploy
+  script:
+    - ./deploy.sh
+  only:
+    - main
+
+logout:
+  stage: logout
+  tags:
+    - docker      
+  script:
+    - docker logout $CI_REGISTRY  
