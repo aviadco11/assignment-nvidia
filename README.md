@@ -16,14 +16,6 @@ this repo include the following files :
    
 3. Deply.sh - part of the CI/CD pipiline (stage deploy).
 
-4. folder app - all the files application side. 
-   include : test folder (unit test), requirments.txt, main.py (src code).
+4. folder app - all the files from application side. 
+   foler include : test folder (unit test), requirments.txt, main.py (src code).
   
-
-## Add your files
-
-cd existing_repo
-git remote add origin https://gitlab.com/aviad.co1/task.git
-git branch -M main
-git push -uf origin main
-```
